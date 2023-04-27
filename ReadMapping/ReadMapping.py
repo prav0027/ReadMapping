@@ -1,42 +1,40 @@
 import pandas as pd
 
-class BWA:
-	#this initializer function creates all the datastructures necessary using the reference string
+class BWT:
 	def __init__(self, reference):
-		#declare datastructures
-		rotation_list = list()
-		rotation_list_reverse = list()
+		suffixRotation = list()
+		reverseSuffixRotation = list()
 		suffix_array = list()
 		bwt = list()
 		C = dict()
 		Occ = dict()
 		Occ_reverse = dict()
 		alphabet = set()
-		reverse_reference = reference[::-1]#reverse reference
+		referenceReverse = reference[::-1]
 		
 		alphabet.add('c')
 		alphabet.add('g')
 		alphabet.add('t')
 		alphabet.add('a')
 		
-		for char in alphabet:
-			C[char] = 0
-			Occ[char] = list()# from website: in Occ, each character has an associated list of integer values
-			Occ_reverse[char] = list()
+		for letter in alphabet:
+			C[letter] = 0
+			Occ[letter] = list()# from website: in Occ, each character has an associated list of integer values
+			Occ_reverse[letter] = list()
 	
 		#add ending character to reference
 		reference = reference+"$"
-		reverse_reference = reverse_reference+"$"
+		referenceReverse = referenceReverse+"$"
 
 		#create suffix combinations of the reference and reverse reference
 		for i in range(len(reference)):
 			new_rotation = "%s%s" % (reference[i:],reference[0:i])
 			suffixObj = Suffix(new_rotation,i)
-			rotation_list.append(suffixObj)
+			suffixRotation.append(suffixObj)
 			
-			new_rotation_reverse = "%s%s" % (reverse_reference[i:],reverse_reference[0:i])
+			new_rotation_reverse = "%s%s" % (referenceReverse[i:],referenceReverse[0:i])
 			suffixObj_rev = Suffix(new_rotation_reverse,i)
-			rotation_list_reverse.append(suffixObj_rev)
+			reverseSuffixRotation.append(suffixObj_rev)
 		
 			#number of characters that are smaller than each char
 			if reference[i]!='$':
@@ -44,38 +42,36 @@ class BWA:
 					if reference[i] < char:
 						C[char] = C[char] + 1	
 		
-		#sort the suffixes
-		rotation_list.sort(key=textKey)
-		rotation_list_reverse.sort(key=textKey)
+		suffixRotation.sort(key=textKey)
+		reverseSuffixRotation.sort(key=textKey)
 	
-		#record results into the suffix array and the BWT array and calculate Occ
-		for i in rotation_list:
+		for i in suffixRotation:
 			suffix_array.append(i.pos)
 			bwt.append(i.text[-1:])
 		
 			#create the Occ
-			for char in alphabet:
-				if len(Occ[char]) == 0:
+			for letter in alphabet:
+				if len(Occ[letter]) == 0:
 					prev = 0
 				else:
-					prev = Occ[char][-1]
-				if i.text[-1:] == char:
-					Occ[char].append(prev+1)
+					prev = Occ[letter][-1]
+				if i.text[-1:] == letter:
+					Occ[letter].append(prev+1)
 				else:
-					Occ[char].append(prev)
+					Occ[letter].append(prev)
 					
 		#record results into the suffix array and the BWT array and calculate Occ
-		for i in rotation_list_reverse:
+		for i in reverseSuffixRotation:
 			#create the Occ
-			for char in alphabet:
-				if len(Occ_reverse[char]) == 0:
+			for letter in alphabet:
+				if len(Occ_reverse[letter]) == 0:
 					prev = 0
 				else:
-					prev = Occ_reverse[char][-1]
-				if i.text[-1:] == char:
-					Occ_reverse[char].append(prev+1)
+					prev = Occ_reverse[letter][-1]
+				if i.text[-1:] == letter:
+					Occ_reverse[letter].append(prev+1)
 				else:
-					Occ_reverse[char].append(prev)					
+					Occ_reverse[letter].append(prev)					
 					
 		self.SA = suffix_array
 		self.BWT = bwt
@@ -83,24 +79,23 @@ class BWA:
 		self.Occ = Occ
 		self.Occ_reverse = Occ_reverse
 		self.n = len(reference)
-		self.D = list()#empty list for later use
+		self.newArray = list()
 		self.alphabet = alphabet
 
-	#get position of the query in the reference
-	def find_match(self,query,num_differences):
+	def getMatchIndex(self,read,num_differences):
 		if num_differences == 0:
-			return self.exact_match(query)
+			return self.matchNoDifferences(read)
 		else:
-			return self.inexact_match(query,num_differences)
+			return self.matchWithDifferences(read,num_differences)
 
 
-	def exact_match(self, query):
-		query = query.lower()
+	def matchNoDifferences(self, read):
+		read = read.lower()
 		i = 0
 		j = self.n - 1
 		
-		for x in range(len(query)):
-			newChar = query[-x-1]
+		for x in range(len(read)):
+			newChar = read[-x-1]
 			newI = self.C[newChar] + self.OCC(newChar,i-1) + 1
 			newJ = self.C[newChar] + self.OCC(newChar,j)
 			i = newI
@@ -109,57 +104,56 @@ class BWA:
 		return matches
 
 	#threshold is number of allowed mutations
-	def inexact_match(self,query,threshold):
-		self.calculate_d(query)
-		SA_indeces = self.inexact_recursion(query, len(query)-1, threshold, 0, self.n-1)
+	def matchWithDifferences(self,read,threshold):
+		self.calculate_distance(read)
+		SA_indeces = self.recursionMatchingWithDifferences(read, len(read)-1, threshold, 0, self.n-1)
 		return [self.SA[x] for x in SA_indeces]
 
-	def inexact_recursion(self,query,i,threshold,k,l):
+	def recursionMatchingWithDifferences(self,read,i,threshold,m,n):
 		tempset = set()
 		resultZ = dict()
 		resultDict = dict()
 		if (threshold < self.get_D(i)):
 			return set()
 		if i < 0:
-			for m in range(k,l+1):
-				tempset.add(m)
-				resultZ[m] = threshold
-				resultDict[m] = resultZ
+			for j in range(m,n+1):
+				tempset.add(j)
+				resultZ[j] = threshold
+				resultDict[j] = resultZ
 			return tempset
 			
 		result = set()
 		#insertion
-		resultAdd = self.inexact_recursion(query,i-1,threshold-insertion_penalty,k,l)
+		resultAdd = self.recursionMatchingWithDifferences(read,i-1,threshold-insertion_penalty,m,n)
 		result = result.union(resultAdd)
 		for char in self.alphabet:
-			newK = self.C[char] + self.OCC(char,k-1) + 1 
-			newL = self.C[char] + self.OCC(char,l)
-			if newK <= newL:#if the substring was found
-				resultAdd = self.inexact_recursion(query,i,threshold-deletion_penalty,newK,newL)
+			newM = self.C[char] + self.OCC(char,m-1) + 1 
+			newN = self.C[char] + self.OCC(char,n)
+			if newM <= newN:#if the substring was found
+				resultAdd = self.recursionMatchingWithDifferences(read,i,threshold-deletion_penalty,newM,newN)
 				result = result.union(resultAdd)
-				if char == query[i]:#if the char was correctly aligned, then continue without decrementing z (differences)
-					result = result.union(self.inexact_recursion(query,i-1,threshold,newK,newL))
-				else:#continue but decrement z, to indicate that this was a difference/unalignment
-					result = result.union(self.inexact_recursion(query,i-1,threshold-mismatch_penalty,newK,newL))
+				if char == read[i]:#char aligned correctly
+					resultAdd = self.recursionMatchingWithDifferences(read,i-1,threshold,newM,newN)
+					result = result.union(resultAdd)
+				else:#unaligned
+					resultAdd = self.recursionMatchingWithDifferences(read,i-1,threshold-mismatch_penalty,newM,newN)
+					result = result.union(resultAdd)
 		return result
 
-	#calculates the D array for a query, used to prune the tree walk and increase speed for inexact searching
-	def calculate_d(self,query):
-		k = 0
+	def calculate_distance(self,read):
+		m = 0
 		l = self.n-1
-		z = 0
-		self.D = list()#empty the D array
-		for i in range(len(query)):
-			k = self.C[query[i]] + self.OCC(query[i],k-1,reverse=True) + 1
-			l = self.C[query[i]] + self.OCC(query[i],l,reverse=True)
-			if k > l:#if this character has NOT been found
-				k = 0
+		distance = 0
+		self.newArray = list()
+		for i in range(len(read)):
+			m = self.C[read[i]] + self.OCC(read[i],m-1,reverse=True) + 1
+			l = self.C[read[i]] + self.OCC(read[i],l,reverse=True)
+			if m > l:
+				m = 0
 				l = self.n - 1
-				z = z + 1
-			self.D.append(z)
+				distance = distance + 1
+			self.newArray.append(distance)
 
-	#returns normal Occ value, otherwise returns the reverse Occ if explicitly passed as an argument
-	#NOTE Occ('a',-1) = 0 for all 'a'
 	def OCC(self,char,index,reverse=False):
 		if index < 0:
 			return 0
@@ -169,24 +163,17 @@ class BWA:
 			else:
 				return self.Occ[char][index]
 	
-	#gets values from the D array
-	#NOTE D(-1) = 0
 	def get_D(self,index):
 		if index < 0:
 			return 0
 		else:
-			return self.D[index]
+			return self.newArray[index]
 
 class Suffix:
-	"""
-	A simple class with 2 variables, used for sorting and calculating the Suffix Array and BWT array
-	Each instance holds the position of the suffix and the suffix (text) itself
-	"""
 	def __init__(self, text, position):
 		self.text = text
 		self.pos = position
 
-#this is used to sort the Suffix objects, according to their text key
 def textKey( a ): return a.text
 
 insertionsDict = dict()
@@ -199,7 +186,6 @@ substitutionsDictNoErrors = dict()
 matchIndexes = list()
 
 def findMutations(query, index, numberOfMismatches, mismatchesCount, data):
-	#mismatchesCount=0
 	for i in range(len(query)):
 		substitutionNeeded = True
 		mismatchesCountTemp = mismatchesCount
@@ -212,8 +198,7 @@ def findMutations(query, index, numberOfMismatches, mismatchesCount, data):
 		#check for insertions
 		while numberOfMismatches>0:
 			iTemp = i+1
-			if index in data.find_match(query[iTemp:], numberOfMismatches-1):
-				print("insertion @ index: ", index)
+			if index in data.getMatchIndex(query[iTemp:], numberOfMismatches-1):
 				substitutionNeeded = False
 				insertions_char_list.append(query[i])
 				insertions_i_list.append(index-1)
@@ -231,7 +216,7 @@ def findMutations(query, index, numberOfMismatches, mismatchesCount, data):
 				tempList.append(insertions_char_list[i])
 				insertionsDict[insertions_i_list[i]] = tempList
 		while numberOfMismatches>0:
-			if index+1 in data.find_match(query[i:], numberOfMismatches-1):
+			if index+1 in data.getMatchIndex(query[i:], numberOfMismatches-1):
 				substitutionNeeded = False
 				deletions_i_list.append(index)
 				index+=1
@@ -276,12 +261,9 @@ def takeOutErrorReads():
 		if deletionsPercent>0.5:
 			tempList = deletionsDict[i]
 			deletionsDictTemp[i] = tempList[0]
-	#print("deletions temp: ", deletionsDictTemp)
 	myKeys = list(deletionsDictTemp.keys())
 	myKeys.sort()
-	#print(myKeys)
 	deletionsNoErrors = {i: deletionsDictTemp[i] for i in myKeys}
-	#print("deletionsDictNoErrors: ", deletionsNoErrors)
 	for i in list(insertionsDict.keys()):
 		minVal = max(0, i-50)
 		insertionsCount = 0
@@ -293,12 +275,9 @@ def takeOutErrorReads():
 			#check all of the elements in the list are the same!
 			tempList = insertionsDict[i]
 			insertionsDictTemp[i] = tempList[0]
-	#print("insertions temp: ", insertionsDictTemp)
 	myKeys = list(insertionsDictTemp.keys())
 	myKeys.sort()
-	#print(myKeys)
 	insertionsNoErrors = {i:insertionsDictTemp[i] for i in myKeys}
-	#print("insertionsDictNoErrors: ", insertionsDictNoErrors)
 	for i in list(substitutionsDict.keys()):
 		minVal = max(0,i-50)
 		substitutionsCount=0
@@ -310,15 +289,12 @@ def takeOutErrorReads():
 			#check all of the elements in the list are the same!
 			tempList = substitutionsDict[i]
 			substitutionsDictTemp[i] = tempList[0]	
-	#print("substitutions temp: ", substitutionsDictTemp)
 	myKeys = list(substitutionsDictTemp.keys())
 	myKeys.sort()
-	#print(myKeys)
 	substitutionsNoErrors = {i:substitutionsDictTemp[i] for i in myKeys}
-	#print("substitutionsDictNoErrors: ", substitutionsDictNoErrors)
 	return deletionsNoErrors, insertionsNoErrors, substitutionsNoErrors
 
-def save_results(fileName = 'results_2.csv'):
+def save_results(fileName = 'results.txt'):
 	f = open(fileName, 'w')
 	for i in list(substitutionsDictNoErrors.keys()):
 		tempTuple = substitutionsDictNoErrors[i]
@@ -328,8 +304,6 @@ def save_results(fileName = 'results_2.csv'):
 	for i in list(deletionsDictNoErrors.keys()):
 		f.write('>D'+str(i)+' '+deletionsDictNoErrors[i].upper()+'\n')
 	f.close()
-
-	#read_file = 
 
 	return
 
@@ -367,7 +341,7 @@ reads = read_reads('reads.txt')
 
 reference = read_reference('genome.txt')
 reference = reference.lower()
-data = BWA(reference)
+data = BWT(reference)
 
 count = 0
 for query in reads:
@@ -375,21 +349,16 @@ for query in reads:
 	query = query.lower()
 	matches = []
 	while len(matches) == 0:
-		matches = data.find_match(query,difference_threshold)
+		matches = data.getMatchIndex(query,difference_threshold)
 		difference_threshold+=1
 	if len(matches)>1:
-		#print("length of matches is greater than 1: ", matches)
 		matches.append(matches[0])
 
 	matchIndexes.append(matches[0])
 
-	#print(query)
-	#print("matches: ", matches)
-	#print("difference threshold: ", difference_threshold-1)
 	findMutations(query, matches[0], difference_threshold-1, 0, data)
 	print("count: ", count)
 	count+=1
-	#print("found mutations")
 
 deletionsDictNoErrors, insertionsDictNoErrors, substitutionsDictNoErrors = takeOutErrorReads()
 save_results()
